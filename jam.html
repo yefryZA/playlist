@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-black select-none overflow-hidden">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jam Layar Penuh Minimalis & Alarm Kebakaran</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: JetBrains Mono & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* Styling khusus agar angka jam memiliki lebar tetap dan tidak bergeser */
+    .font-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+
+    /* Warna Jam Hijau Redup Default */
+    :root {
+      --clock-color: #1e6b34;
+      --clock-opacity: 0.85;
+    }
+
+    .theme-clock-color {
+      color: var(--clock-color);
+      opacity: var(--clock-opacity);
+      text-shadow: 0 0 12px rgba(30, 107, 52, 0.25);
+    }
+
+    /* Transisi Halus Kontrol UI */
+    .ui-fade {
+      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.5s;
+    }
+
+    /* Sembunyikan Kursor Mouse saat Idle */
+    body.idle-cursor, body.idle-cursor * {
+      cursor: none !important;
+    }
+
+    /* Custom range slider styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, 0.15);
+      height: 4px;
+      border-radius: 2px;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 14px;
+      width: 14px;
+      border-radius: 50%;
+      background: var(--clock-color);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Styling khusus untuk input time agar pas dengan tema gelap */
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8) sepia(1) saturate(5) hue-rotate(90deg);
+      cursor: pointer;
+    }
+
+    /* Titik dua jam berkedip sangat halus */
+    @keyframes subtlePulse {
+      0%, 100% { opacity: var(--clock-opacity); }
+      50% { opacity: calc(var(--clock-opacity) * 0.4); }
+    }
+    .colon-pulse {
+      animation: subtlePulse 2s infinite ease-in-out;
+    }
+
+    /* Animasi Denyut Merah Layar Saat Alarm Kebakaran Berbunyi */
+    @keyframes fireAlarmPulse {
+      0%, 100% { background-color: #450a0a; }
+      50% { background-color: #7f1d1d; }
+    }
+    .alarm-active-bg {
+      animation: fireAlarmPulse 1s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full bg-black text-gray-200 flex flex-col justify-between items-center relative overflow-hidden font-sans">
+
+  <!-- Main Click Overlay for Fullscreen Toggle -->
+  <div id="fullscreenOverlay" class="absolute inset-0 z-0 cursor-pointer flex flex-col justify-center items-center">
+    
+    <!-- Clock Display Container (Shifted subtly for OLED burn-in protection) -->
+    <div id="clockWrapper" class="flex flex-col items-center justify-center transition-transform duration-1000 ease-in-out">
+      
+      <!-- Digital Time Display -->
+      <div id="clockDisplay" class="font-clock theme-clock-color text-[22vw] leading-none tracking-tight font-light flex items-center justify-center">
+        <span id="hours">00</span>
+        <span id="colon1" class="colon-pulse leading-none -mt-[1.5vw] px-[0.5vw]">:</span>
+        <span id="minutes">00</span>
+        <span id="secondsContainer" class="hidden flex items-center">
+          <span id="colon2" class="colon-pulse leading-none -mt-[1.5vw] px-[0.5vw]">:</span>
+          <span id="seconds">00</span>
+        </span>
+        <span id="ampm" class="text-[5vw] ml-[1vw] font-normal hidden">AM</span>
+      </div>
+
+      <!-- Date Display (Indonesian Format) -->
+      <div id="dateDisplay" class="theme-clock-color text-[2.2vw] tracking-wider font-light mt-4 transition-opacity duration-300">
+        --
+      </div>
+
+      <!-- Subtle Active Alarm Indicator -->
+      <div id="alarmIndicator" class="theme-clock-color text-[1.4vw] tracking-widest font-mono mt-3 flex items-center gap-2 hidden transition-all duration-300">
+        <svg class="w-[1.4vw] h-[1.4vw] animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/>
+        </svg>
+        <span>ALARM <span id="alarmIndicatorTime">06:00</span></span>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Initial User Guide Overlay (Fades out automatically) -->
+  <div id="hintBox" class="z-10 pointer-events-none fixed bottom-10 text-center text-xs tracking-widest text-emerald-900/70 font-mono uppercase transition-opacity duration-700">
+    Klik di mana saja untuk Layar Penuh (Fullscreen)
+  </div>
+
+  <!-- Mini Floating Control Panel (Shows on mouse movement) -->
+  <div id="controlPanel" class="z-20 fixed bottom-4 bg-neutral-900/90 backdrop-blur-md border border-neutral-800/90 rounded-full px-5 py-2.5 flex flex-wrap items-center justify-center gap-4 max-w-[95vw] shadow-2xl ui-fade opacity-0 invisible">
+    
+    <!-- Brightness/Opacity Slider -->
+    <div class="flex items-center gap-2" title="Tingkat Kecerahan Hijau">
+      <svg class="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+      <input type="range" id="brightnessSlider" min="0.15" max="1" step="0.05" value="0.85" class="w-16 md:w-20 accent-emerald-600">
+    </div>
+
+    <div class="hidden sm:block h-4 w-[1px] bg-neutral-800"></div>
+
+    <!-- Color Preset Quick Select -->
+    <div class="flex items-center gap-1.5" title="Warna Layar Redup">
+      <button data-color="#1e6b34" class="w-4 h-4 rounded-full bg-[#1e6b34] ring-1 ring-white/20 hover:scale-110 transition-transform" title="Hijau Redup Night"></button>
+      <button data-color="#22c55e" class="w-4 h-4 rounded-full bg-[#22c55e] ring-1 ring-white/20 hover:scale-110 transition-transform" title="Hijau Matrix"></button>
+      <button data-color="#d97706" class="w-4 h-4 rounded-full bg-[#d97706] ring-1 ring-white/20 hover:scale-110 transition-transform" title="Amber Hangat"></button>
+    </div>
+
+    <div class="h-4 w-[1px] bg-neutral-800"></div>
+
+    <!-- Alarm Fire Section -->
+    <div class="flex items-center gap-2 bg-neutral-950/60 px-3 py-1 rounded-full border border-neutral-800">
+      <svg class="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-1.348c-1.874 2.01-3.69 4.316-4.664 6.27-.63 1.265-.67 2.38-.568 3.23-.082.073-.162.15-.24.232a5.534 5.534 0 00-1.325 2.37A5.5 5.5 0 006 18c.84 0 1.637-.202 2.355-.568.858-.438 1.623-1.07 2.245-1.84.622.77 1.387 1.402 2.245 1.84A5.467 5.467 0 0015 18a5.5 5.5 0 001.325-4.386 5.534 5.534 0 00-1.325-2.37 8.358 8.358 0 00-.24-.232c.102-.85.062-1.965-.568-3.23-.974-1.954-2.79-4.26-4.664-6.27z" clip-rule="evenodd" />
+      </svg>
+      <input type="time" id="alarmTimeInput" value="06:00" class="bg-neutral-900 text-neutral-200 text-xs font-mono rounded px-1.5 py-0.5 border border-neutral-700 focus:outline-none focus:border-rose-500">
+      
+      <!-- Alarm Toggle Button -->
+      <button id="btnToggleAlarm" class="px-2 py-0.5 text-xs font-mono rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors flex items-center gap-1">
+        Alarm: <span id="statusAlarmText" class="text-neutral-500 font-bold">OFF</span>
+      </button>
+
+      <!-- Test Sound Button -->
+      <button id="btnTestSound" class="px-2 py-0.5 text-xs font-mono rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/50 transition-colors" title="Uji Coba Suara Sirine Kebakaran">
+        Tes Suara
+      </button>
+    </div>
+
+    <div class="h-4 w-[1px] bg-neutral-800"></div>
+
+    <!-- Toggle Seconds Button -->
+    <button id="btnToggleSeconds" class="px-2.5 py-1 text-xs font-mono rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors" title="Tampilkan/Sembunyikan Detik">
+      :SS <span id="statusSeconds" class="text-emerald-500 ml-1">Off</span>
+    </button>
+
+    <!-- Toggle 12/24 Format -->
+    <button id="btnToggleFormat" class="px-2.5 py-1 text-xs font-mono rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors" title="Format Jam">
+      <span id="statusFormat">24 Jam</span>
+    </button>
+
+    <!-- Toggle Date Display -->
+    <button id="btnToggleDate" class="px-2.5 py-1 text-xs font-mono rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors" title="Tampilkan/Sembunyikan Tanggal">
+      TGL <span id="statusDate" class="text-emerald-500 ml-1">On</span>
+    </button>
+
+    <!-- Fullscreen Button -->
+    <button id="btnFullscreen" class="text-neutral-400 hover:text-white transition-colors ml-1" title="Layar Penuh">
+      <svg id="iconExpand" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4" />
+      </svg>
+      <svg id="iconCompress" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 14v6m0 0h-6m6 0l-5-5m-11 5h6m-6 0v-6m0 6l5-5m11-5V4m0 0h-6m6 0l-5 5M4 10V4m0 0h6m-6 0l5 5" />
+      </svg>
+    </button>
+
+  </div>
+
+  <!-- FIRE ALARM TRIGGER OVERLAY (MODAL) -->
+  <div id="alarmModal" class="fixed inset-0 z-50 hidden flex flex-col items-center justify-center alarm-active-bg text-white p-6 transition-all duration-300">
+    <div class="flex flex-col items-center max-w-lg text-center space-y-6">
+      
+      <!-- Warning Icon -->
+      <div class="relative">
+        <div class="absolute -inset-4 bg-rose-600 rounded-full blur-lg opacity-75 animate-ping"></div>
+        <div class="relative w-24 h-24 bg-rose-700 rounded-full flex items-center justify-center border-4 border-white shadow-2xl">
+          <svg class="w-12 h-12 text-white animate-bounce" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-1.348c-1.874 2.01-3.69 4.316-4.664 6.27-.63 1.265-.67 2.38-.568 3.23-.082.073-.162.15-.24.232a5.534 5.534 0 00-1.325 2.37A5.5 5.5 0 006 18c.84 0 1.637-.202 2.355-.568.858-.438 1.623-1.07 2.245-1.84.622.77 1.387 1.402 2.245 1.84A5.467 5.467 0 0015 18a5.5 5.5 0 001.325-4.386 5.534 5.534 0 00-1.325-2.37 8.358 8.358 0 00-.24-.232c.102-.85.062-1.965-.568-3.23-.974-1.954-2.79-4.26-4.664-6.27z" clip-rule="evenodd" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Warning Header -->
+      <div>
+        <h1 class="text-3xl md:text-5xl font-black tracking-wider text-rose-100 uppercase drop-shadow-md">
+          🚨 BANGUN SAYANG ‼️‼️‼️ 🚨
+        </h1>
+        <p class="text-rose-200 text-sm md:text-base mt-2 font-mono tracking-widest uppercase">
+          Waktunya Beraktivitas!
+        </p>
+      </div>
+
+      <!-- Alarm Time Display -->
+      <div id="alarmModalTime" class="font-clock text-6xl md:text-8xl font-bold tracking-tight text-white drop-shadow-lg">
+        00:00
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-col sm:flex-row items-center gap-4 w-full pt-4">
+        <button id="btnDismissAlarm" class="w-full sm:w-auto flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-4 px-8 rounded-2xl shadow-2xl text-lg tracking-wide uppercase transition-transform active:scale-95 border-2 border-rose-300">
+          Matikan Alarm
+        </button>
+        <button id="btnSnoozeAlarm" class="w-full sm:w-auto bg-neutral-900/80 hover:bg-neutral-800 text-rose-200 font-semibold py-4 px-6 rounded-2xl border border-rose-800/80 text-sm tracking-wide transition-colors">
+          Snooze 5 Menit
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. KONFIGURASI LOKASI & JADWAL SHOLAT HARIAN
+    // =========================================================================
+    const LOKASI_SHOLAT = {
+      city: 'Cilegon',      // Ubah ke nama kota kamu jika perlu (misal: 'Jakarta', 'Serang', 'Bandung')
+      country: 'Indonesia',
+      method: 20            // 20 = Kementerian Agama Republik Indonesia (KEMENAG)
+    };
+
+    // Audio Adzan (Sumber MP3 Adzan Merdu)
+    const adzanAudio = new Audio('https://www.islamcan.com/audio/adhan/azan1.mp3');
+    adzanAudio.preload = 'auto';
+
+    // =========================================================================
+    // 2. AUDIO SYNTHESIZER SIRINE KEBAKARAN (NFPA Temporal-3 Standard)
+    // =========================================================================
+    class FireAlarmSynthesizer {
+      constructor() {
+        this.audioCtx = null;
+        this.isPlaying = false;
+        this.timer = null;
+      }
+
+      init() {
+        if (!this.audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            this.audioCtx = new AudioContextClass();
+          }
+        }
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume();
+        }
+      }
+
+      playBlast(duration = 0.5) {
+        if (!this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+        
+        const blastGain = this.audioCtx.createGain();
+        blastGain.gain.setValueAtTime(0.35, now);
+        blastGain.gain.setValueAtTime(0.35, now + duration - 0.02);
+        blastGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        blastGain.connect(this.audioCtx.destination);
+
+        const osc1 = this.audioCtx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(3100, now);
+        osc1.connect(blastGain);
+
+        const osc2 = this.audioCtx.createOscillator();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(3150, now);
+        osc2.connect(blastGain);
+
+        const osc3 = this.audioCtx.createOscillator();
+        osc3.type = 'sawtooth';
+        osc3.frequency.setValueAtTime(1550, now);
+        const gain3 = this.audioCtx.createGain();
+        gain3.gain.value = 0.4;
+        osc3.connect(gain3);
+        gain3.connect(blastGain);
+
+        osc1.frequency.exponentialRampToValueAtTime(3070, now + duration);
+        osc2.frequency.exponentialRampToValueAtTime(3120, now + duration);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc3.start(now);
+
+        osc1.stop(now + duration);
+        osc2.stop(now + duration);
+        osc3.stop(now + duration);
+      }
+
+      start() {
+        this.init();
+        if (this.isPlaying) return;
+        this.isPlaying = true;
+
+        const runPattern = () => {
+          if (!this.isPlaying) return;
+          this.playBlast(0.5);
+          setTimeout(() => { if (this.isPlaying) this.playBlast(0.5); }, 1000);
+          setTimeout(() => { if (this.isPlaying) this.playBlast(0.5); }, 2000);
+        };
+
+        runPattern();
+        this.timer = setInterval(() => {
+          if (this.isPlaying) runPattern();
+        }, 4000);
+      }
+
+      stop() {
+        this.isPlaying = false;
+        if (this.timer) {
+          clearInterval(this.timer);
+          this.timer = null;
+        }
+      }
+    }
+
+    const alarmSynth = new FireAlarmSynthesizer();
+
+    // =========================================================================
+    // 3. STATE APLIKASI
+    // =========================================================================
+    const state = {
+      is24Hour: true,
+      showSeconds: false,
+      showDate: true,
+      brightness: 0.85,
+      currentColor: '#1e6b34',
+      alarmActive: false,
+      alarmTime: '06:00',
+      alarmRinging: false,
+      isTestingSound: false,
+      lastTriggeredMinute: null,
+      // State Adzan Otomatis
+      adzanEnabled: true,
+      adzanRinging: false,
+      isTestingAdzan: false,
+      lastAdzanMinute: null,
+      lastFetchedDate: null,
+      prayerTimes: {
+        Subuh: '--:--',
+        Dzuhur: '--:--',
+        Ashar: '--:--',
+        Maghrib: '--:--',
+        Isya: '--:--'
+      },
+      wakeLock: null,
+      idleTimer: null,
+      hintTimeout: null
+    };
+
+    // =========================================================================
+    // 4. DOM ELEMENTS & SUNTIKAN UI ADZAN OTOMATIS
+    // =========================================================================
+    const hoursEl = document.getElementById('hours');
+    const minutesEl = document.getElementById('minutes');
+    const secondsEl = document.getElementById('seconds');
+    const secondsContainer = document.getElementById('secondsContainer');
+    const ampmEl = document.getElementById('ampm');
+    const dateDisplay = document.getElementById('dateDisplay');
+    const clockWrapper = document.getElementById('clockWrapper');
+    const controlPanel = document.getElementById('controlPanel');
+    const hintBox = document.getElementById('hintBox');
+    const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+
+    const brightnessSlider = document.getElementById('brightnessSlider');
+    const btnToggleSeconds = document.getElementById('btnToggleSeconds');
+    const statusSeconds = document.getElementById('statusSeconds');
+    const btnToggleFormat = document.getElementById('btnToggleFormat');
+    const statusFormat = document.getElementById('statusFormat');
+    const btnToggleDate = document.getElementById('btnToggleDate');
+    const statusDate = document.getElementById('statusDate');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    const iconExpand = document.getElementById('iconExpand');
+    const iconCompress = document.getElementById('iconCompress');
+
+    const alarmTimeInput = document.getElementById('alarmTimeInput');
+    const btnToggleAlarm = document.getElementById('btnToggleAlarm');
+    const statusAlarmText = document.getElementById('statusAlarmText');
+    const btnTestSound = document.getElementById('btnTestSound');
+    const alarmIndicator = document.getElementById('alarmIndicator');
+    const alarmIndicatorTime = document.getElementById('alarmIndicatorTime');
+    const alarmModal = document.getElementById('alarmModal');
+    const alarmModalTime = document.getElementById('alarmModalTime');
+    const btnDismissAlarm = document.getElementById('btnDismissAlarm');
+    const btnSnoozeAlarm = document.getElementById('btnSnoozeAlarm');
+
+    // Suntikkan Panel Jadwal Sholat ke Control Panel & Modal Adzan ke Body
+    function injectAdzanUI() {
+      // 1. Panel Kontrol Jadwal Sholat di dalam controlPanel
+      const adzanControlHTML = `
+        <div id="adzanControlBox" class="mt-3 pt-3 border-t border-neutral-800/80 text-xs">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-emerald-400 font-semibold flex items-center gap-1.5">
+              🕌 Adzan Otomatis (${LOKASI_SHOLAT.city})
+            </span>
+            <div class="flex items-center gap-1.5">
+              <button id="btnTestAdzan" class="px-2 py-1 rounded bg-emerald-950/80 text-emerald-300 hover:bg-emerald-800 transition text-[11px]">
+                Tes Adzan
+              </button>
+              <button id="btnToggleAdzan" class="px-2.5 py-1 rounded border border-emerald-700/80 bg-emerald-950/60 text-emerald-400 font-bold text-[11px] transition">
+                ON
+              </button>
+            </div>
+          </div>
+          <div id="prayerScheduleGrid" class="grid grid-cols-5 gap-1.5 text-center bg-black/40 p-2 rounded-lg border border-neutral-800/60">
+            <div><div class="text-[10px] text-neutral-400">Subuh</div><div id="time-Subuh" class="font-mono font-bold text-emerald-300">--:--</div></div>
+            <div><div class="text-[10px] text-neutral-400">Dzuhur</div><div id="time-Dzuhur" class="font-mono font-bold text-emerald-300">--:--</div></div>
+            <div><div class="text-[10px] text-neutral-400">Ashar</div><div id="time-Ashar" class="font-mono font-bold text-emerald-300">--:--</div></div>
+            <div><div class="text-[10px] text-neutral-400">Maghrib</div><div id="time-Maghrib" class="font-mono font-bold text-emerald-300">--:--</div></div>
+            <div><div class="text-[10px] text-neutral-400">Isya</div><div id="time-Isya" class="font-mono font-bold text-emerald-300">--:--</div></div>
+          </div>
+        </div>
+      `;
+      if (controlPanel) {
+        controlPanel.insertAdjacentHTML('beforeend', adzanControlHTML);
+      }
+
+      // 2. Modal Popup Saat Waktu Adzan Tiba
+      const adzanModalHTML = `
+        <div id="adzanModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+          <div class="bg-neutral-950 border-2 border-emerald-500 rounded-2xl p-6 max-w-sm w-full text-center shadow-[0_0_50px_rgba(16,185,129,0.35)]">
+            <div class="text-4xl mb-2">🕌</div>
+            <div class="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-1">WAKTU SHOLAT TELAH TIBA</div>
+            <h2 id="adzanModalTitle" class="text-3xl font-bold text-white mb-1">ADZAN MAGHRIB</h2>
+            <div id="adzanModalTime" class="text-xl font-mono text-emerald-300 mb-2">18:00</div>
+            <p class="text-xs text-neutral-400 mb-6">Wilayah ${LOKASI_SHOLAT.city} & Sekitarnya</p>
+            <button id="btnDismissAdzan" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm tracking-wide transition cursor-pointer">
+              Hentikan Suara Adzan
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', adzanModalHTML);
+    }
+
+    injectAdzanUI();
+
+    // Referensi Elemen Adzan setelah disuntikkan
+    const btnToggleAdzan = document.getElementById('btnToggleAdzan');
+    const btnTestAdzan = document.getElementById('btnTestAdzan');
+    const adzanModal = document.getElementById('adzanModal');
+    const adzanModalTitle = document.getElementById('adzanModalTitle');
+    const adzanModalTime = document.getElementById('adzanModalTime');
+    const btnDismissAdzan = document.getElementById('btnDismissAdzan');
+
+    // =========================================================================
+    // 5. LOGIKA AMBIL JADWAL SHOLAT HARIAN (ALADHAN API - KEMENAG RI)
+    // =========================================================================
+    async function fetchDailyPrayerTimes() {
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      const dateStr = `${dd}-${mm}-${yyyy}`;
+
+      // Cegah fetch berulang di hari yang sama
+      if (state.lastFetchedDate === dateStr) return;
+
+      try {
+        const url = `https://api.aladhan.com/v1/timingsByCity/${dateStr}?city=${encodeURIComponent(LOKASI_SHOLAT.city)}&country=${encodeURIComponent(LOKASI_SHOLAT.country)}&method=${LOKASI_SHOLAT.method}`;
+        const response = await fetch(url);
+        const json = await response.json();
+
+        if (json && json.code === 200 && json.data && json.data.timings) {
+          const t = json.data.timings;
+          // Bersihkan format zona waktu jika ada, misal "18:05 (WIB)" -> "18:05"
+          const cleanTime = (str) => str.split(' ')[0].trim();
+
+          state.prayerTimes = {
+            Subuh: cleanTime(t.Fajr),
+            Dzuhur: cleanTime(t.Dhuhr),
+            Ashar: cleanTime(t.Asr),
+            Maghrib: cleanTime(t.Maghrib),
+            Isya: cleanTime(t.Isha)
+          };
+
+          state.lastFetchedDate = dateStr;
+          localStorage.setItem('cached_prayer_times', JSON.stringify({
+            date: dateStr,
+            timings: state.prayerTimes
+          }));
+
+          renderPrayerTimesUI();
+        }
+      } catch (err) {
+        console.warn("Gagal mengambil jadwal sholat online, mencoba cache lokal:", err);
+        const cached = localStorage.getItem('cached_prayer_times');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          state.prayerTimes = parsed.timings;
+          renderPrayerTimesUI();
+        }
+      }
+    }
+
+    function renderPrayerTimesUI() {
+      Object.entries(state.prayerTimes).forEach(([nama, waktu]) => {
+        const el = document.getElementById(`time-${nama}`);
+        if (el) el.textContent = waktu;
+      });
+    }
+
+    // =========================================================================
+    // 6. KONTROL AUDIO & PEMICU ADZAN OTOMATIS
+    // =========================================================================
+    function unlockAudio() {
+      alarmSynth.init();
+      // Pancing izin autoplay audio browser pada klik pertama
+      adzanAudio.play().then(() => {
+        if (!state.adzanRinging && !state.isTestingAdzan) {
+          adzanAudio.pause();
+          adzanAudio.currentTime = 0;
+        }
+      }).catch(() => {});
+    }
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+
+    function triggerAdzan(namaSholat, waktuStr) {
+      state.adzanRinging = true;
+      state.lastAdzanMinute = waktuStr;
+
+      // Hentikan alarm lain jika sedang berbunyi
+      if (state.alarmRinging) dismissAlarm();
+      if (state.isTestingSound) stopSoundTest();
+      if (state.isTestingAdzan) stopAdzanTest();
+
+      // Putar Audio Adzan
+      adzanAudio.currentTime = 0;
+      adzanAudio.play().catch(err => console.warn("Autoplay adzan diblokir browser:", err));
+
+      // Tampilkan Modal Adzan
+      adzanModalTitle.textContent = `ADZAN ${namaSholat.toUpperCase()}`;
+      adzanModalTime.textContent = `${waktuStr} WIB`;
+      adzanModal.classList.remove('hidden');
+      document.body.classList.remove('idle-cursor');
+
+      // Otomatis tutup modal setelah adzan selesai diputar
+      adzanAudio.onended = () => {
+        dismissAdzan();
+      };
+    }
+
+    function dismissAdzan() {
+      state.adzanRinging = false;
+      adzanAudio.pause();
+      adzanAudio.currentTime = 0;
+      adzanModal.classList.add('hidden');
+    }
+
+    function toggleAdzanTest() {
+      unlockAudio();
+      if (state.isTestingAdzan) {
+        stopAdzanTest();
+      } else {
+        state.isTestingAdzan = true;
+        btnTestAdzan.textContent = 'Stop';
+        btnTestAdzan.classList.replace('bg-emerald-950/80', 'bg-emerald-600');
+        btnTestAdzan.classList.replace('text-emerald-300', 'text-white');
+        adzanAudio.currentTime = 0;
+        adzanAudio.play().catch(err => alert("Klik layar terlebih dahulu agar browser mengizinkan suara."));
+        adzanAudio.onended = () => stopAdzanTest();
+      }
+    }
+
+    function stopAdzanTest() {
+      state.isTestingAdzan = false;
+      adzanAudio.pause();
+      adzanAudio.currentTime = 0;
+      btnTestAdzan.textContent = 'Tes Adzan';
+      btnTestAdzan.classList.replace('bg-emerald-600', 'bg-emerald-950/80');
+      btnTestAdzan.classList.replace('text-white', 'text-emerald-300');
+    }
+
+    // Event Listener Tombol Adzan
+    btnToggleAdzan.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unlockAudio();
+      state.adzanEnabled = !state.adzanEnabled;
+      if (state.adzanEnabled) {
+        btnToggleAdzan.textContent = 'ON';
+        btnToggleAdzan.className = 'px-2.5 py-1 rounded border border-emerald-700/80 bg-emerald-950/60 text-emerald-400 font-bold text-[11px] transition';
+      } else {
+        btnToggleAdzan.textContent = 'OFF';
+        btnToggleAdzan.className = 'px-2.5 py-1 rounded border border-neutral-700 bg-neutral-900 text-neutral-500 font-bold text-[11px] transition';
+        if (state.adzanRinging) dismissAdzan();
+      }
+    });
+
+    btnTestAdzan.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAdzanTest();
+    });
+
+    btnDismissAdzan.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissAdzan();
+    });
+
+    // =========================================================================
+    // 7. UPDATE JAM, TANGGAL & PENGECEKAN ALARM + ADZAN
+    // =========================================================================
+    function updateClock() {
+      const now = new Date();
+      let hours = now.getHours();
+      const rawHoursStr = String(hours).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const currentTimeStr = `${rawHoursStr}:${minutes}`;
+
+      // Perbarui jadwal sholat otomatis setiap pergantian hari
+      const todayKey = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+      if (state.lastFetchedDate !== todayKey) {
+        fetchDailyPrayerTimes();
+      }
+
+      // Formatting 12 vs 24 jam
+      if (!state.is24Hour) {
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        ampmEl.textContent = ampm;
+        ampmEl.classList.remove('hidden');
+      } else {
+        ampmEl.classList.add('hidden');
+      }
+
+      hoursEl.textContent = String(hours).padStart(2, '0');
+      minutesEl.textContent = minutes;
+      secondsEl.textContent = seconds;
+
+      if (state.showDate) {
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        dateDisplay.textContent = now.toLocaleDateString('id-ID', options);
+      }
+
+      // 1. Cek Jadwal Adzan Otomatis
+      if (state.adzanEnabled && !state.adzanRinging && state.lastAdzanMinute !== currentTimeStr) {
+        for (const [namaSholat, waktuSholat] of Object.entries(state.prayerTimes)) {
+          if (currentTimeStr === waktuSholat) {
+            triggerAdzan(namaSholat, currentTimeStr);
+            break;
+          }
+        }
+      }
+
+      // 2. Cek Alarm Kebakaran Manual
+      if (state.alarmActive && !state.alarmRinging && !state.adzanRinging) {
+        if (currentTimeStr === state.alarmTime && state.lastTriggeredMinute !== currentTimeStr) {
+          triggerAlarm(currentTimeStr);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 8. FUNGSI ALARM KEBAKARAN & KONTROL LAINNYA (TETAP SAMA)
+    // =========================================================================
+    function triggerAlarm(timeStr) {
+      state.alarmRinging = true;
+      state.lastTriggeredMinute = timeStr;
+      if (state.isTestingSound) stopSoundTest();
+
+      alarmSynth.start();
+      alarmModalTime.textContent = timeStr;
+      alarmModal.classList.remove('hidden');
+      document.body.classList.remove('idle-cursor');
+    }
+
+    function dismissAlarm() {
+      state.alarmRinging = false;
+      state.alarmActive = false;
+      alarmSynth.stop();
+      alarmModal.classList.add('hidden');
+      updateAlarmUI();
+    }
+
+    function snoozeAlarm() {
+      state.alarmRinging = false;
+      alarmSynth.stop();
+      alarmModal.classList.add('hidden');
+
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 5);
+      state.alarmTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      alarmTimeInput.value = state.alarmTime;
+      state.alarmActive = true;
+      updateAlarmUI();
+    }
+
+    function toggleSoundTest() {
+      unlockAudio();
+      if (state.isTestingSound) {
+        stopSoundTest();
+      } else {
+        state.isTestingSound = true;
+        btnTestSound.textContent = 'Hentikan';
+        btnTestSound.classList.replace('bg-rose-950/80', 'bg-rose-600');
+        btnTestSound.classList.replace('text-rose-300', 'text-white');
+        alarmSynth.start();
+      }
+    }
+
+    function stopSoundTest() {
+      state.isTestingSound = false;
+      alarmSynth.stop();
+      btnTestSound.textContent = 'Tes Suara';
+      btnTestSound.classList.replace('bg-rose-600', 'bg-rose-950/80');
+      btnTestSound.classList.replace('text-white', 'text-rose-300');
+    }
+
+    function updateAlarmUI() {
+      state.alarmTime = alarmTimeInput.value;
+      alarmIndicatorTime.textContent = state.alarmTime;
+
+      if (state.alarmActive) {
+        statusAlarmText.textContent = 'ON';
+        statusAlarmText.className = 'text-rose-500 font-bold';
+        btnToggleAlarm.classList.add('border', 'border-rose-800/80', 'bg-rose-950/50');
+        alarmIndicator.classList.remove('hidden');
+      } else {
+        statusAlarmText.textContent = 'OFF';
+        statusAlarmText.className = 'text-neutral-500 font-bold';
+        btnToggleAlarm.classList.remove('border', 'border-rose-800/80', 'bg-rose-950/50');
+        alarmIndicator.classList.add('hidden');
+      }
+    }
+
+    function resetIdleTimer() {
+      if (state.alarmRinging || state.adzanRinging) {
+        document.body.classList.remove('idle-cursor');
+        return;
+      }
+
+      document.body.classList.remove('idle-cursor');
+      controlPanel.classList.remove('opacity-0', 'invisible');
+      controlPanel.classList.add('opacity-100', 'visible');
+
+      clearTimeout(state.idleTimer);
+      state.idleTimer = setTimeout(() => {
+        if (!state.alarmRinging && !state.adzanRinging && !document.activeElement.closest('#controlPanel')) {
+          document.body.classList.add('idle-cursor');
+          controlPanel.classList.remove('opacity-100', 'visible');
+          controlPanel.classList.add('opacity-0', 'invisible');
+        }
+      }, 2500);
+    }
+
+    window.addEventListener('mousemove', resetIdleTimer);
+    window.addEventListener('mousedown', resetIdleTimer);
+    window.addEventListener('touchstart', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+
+    async function toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+          iconExpand.classList.add('hidden');
+          iconCompress.classList.remove('hidden');
+          hideHint();
+        } else if (document.exitFullscreen) {
+          await document.exitFullscreen();
+          iconExpand.classList.remove('hidden');
+          iconCompress.classList.add('hidden');
+        }
+      } catch (err) {
+        console.warn("Gagal mengubah mode layar penuh:", err);
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        iconExpand.classList.add('hidden');
+        iconCompress.classList.remove('hidden');
+        hideHint();
+        requestWakeLock();
+      } else {
+        iconExpand.classList.remove('hidden');
+        iconCompress.classList.add('hidden');
+      }
+    });
+
+    fullscreenOverlay.addEventListener('click', (e) => {
+      if (e.target.closest('#controlPanel') || e.target.closest('#alarmModal') || e.target.closest('#adzanModal')) return;
+      toggleFullscreen();
+    });
+
+    btnFullscreen.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+
+    controlPanel.addEventListener('click', (e) => e.stopPropagation());
+    alarmTimeInput.addEventListener('change', () => updateAlarmUI());
+
+    btnToggleAlarm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unlockAudio();
+      state.alarmActive = !state.alarmActive;
+      updateAlarmUI();
+    });
+
+    btnTestSound.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSoundTest();
+    });
+
+    btnDismissAlarm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissAlarm();
+    });
+
+    btnSnoozeAlarm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      snoozeAlarm();
+    });
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          state.wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.warn("Wake Lock error:", err);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+
+    brightnessSlider.addEventListener('input', (e) => {
+      state.brightness = e.target.value;
+      document.documentElement.style.setProperty('--clock-opacity', state.brightness);
+    });
+
+    btnToggleSeconds.addEventListener('click', () => {
+      state.showSeconds = !state.showSeconds;
+      secondsContainer.classList.toggle('hidden', !state.showSeconds);
+      statusSeconds.textContent = state.showSeconds ? 'On' : 'Off';
+    });
+
+    btnToggleFormat.addEventListener('click', () => {
+      state.is24Hour = !state.is24Hour;
+      statusFormat.textContent = state.is24Hour ? '24 Jam' : '12 Jam';
+      updateClock();
+    });
+
+    btnToggleDate.addEventListener('click', () => {
+      state.showDate = !state.showDate;
+      dateDisplay.classList.toggle('hidden', !state.showDate);
+      statusDate.textContent = state.showDate ? 'On' : 'Off';
+    });
+
+    document.querySelectorAll('[data-color]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const color = e.target.getAttribute('data-color');
+        state.currentColor = color;
+        document.documentElement.style.setProperty('--clock-color', color);
+      });
+    });
+
+    function hideHint() {
+      if (hintBox) {
+        hintBox.style.opacity = '0';
+        setTimeout(() => hintBox.remove(), 700);
+      }
+    }
+
+    function applyPixelShift() {
+      const randomX = Math.floor(Math.random() * 5) - 2;
+      const randomY = Math.floor(Math.random() * 5) - 2;
+      clockWrapper.style.transform = `translate(${randomX}px, ${randomY}px)`;
+    }
+
+    // =========================================================================
+    // 9. INISIALISASI APLIKASI
+    // =========================================================================
+    window.addEventListener('load', () => {
+      fetchDailyPrayerTimes(); // Ambil jadwal sholat hari ini saat pertama buka
+      updateClock();
+      setInterval(updateClock, 1000);
+      setInterval(applyPixelShift, 60000);
+      requestWakeLock();
+      resetIdleTimer();
+
+      state.hintTimeout = setTimeout(hideHint, 5000);
+    });
+</script>
+</body>
+</html>
